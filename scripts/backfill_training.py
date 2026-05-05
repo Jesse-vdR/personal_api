@@ -26,6 +26,7 @@ from app.db import engine  # noqa: E402
 from app.models.training import TrainingEvent  # noqa: E402
 
 DEFAULT_PATH = Path("/home/ubuntu/Jesse/training/log/events.jsonl")
+SEED_USER_ID = 1  # the migration-seeded Jesse user (alembic 0004); jsonl is his data only.
 
 
 def _parse_ts(raw: str) -> datetime:
@@ -51,6 +52,7 @@ def main() -> int:
                 obj = json.loads(line)
                 rows.append(
                     {
+                        "user_id": SEED_USER_ID,
                         "ts": _parse_ts(obj["ts"]),
                         "local_date": obj["local_date"],
                         "exercise": obj["exercise"],
