@@ -3,10 +3,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, FastAPI
 
+from app.auth import require_bearer
 from app.config import settings
+from app.routers.training import router as training_router
 
 logging.basicConfig(
     level=settings.log_level,
@@ -21,17 +22,7 @@ SHA = _version_file.read_text().strip() if _version_file.exists() else "dev"
 app = FastAPI(title="jesse-api", version="0.0.1")
 log.info("jesse-api starting sha=%s log_level=%s", SHA, settings.log_level)
 
-bearer_scheme = HTTPBearer(auto_error=False)
-
-
-def require_bearer(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
-) -> None:
-    if not settings.bearer_token:
-        log.error("BEARER_TOKEN not configured — refusing auth-required request")
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "auth not configured")
-    if credentials is None or credentials.credentials != settings.bearer_token:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or missing bearer token")
+app.include_router(training_router)
 
 
 @app.get("/")
