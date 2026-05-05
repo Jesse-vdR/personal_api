@@ -4,6 +4,7 @@ from sqlalchemy import (
     BigInteger,
     Date,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     SmallInteger,
@@ -19,11 +20,15 @@ from app.db import Base
 class TrainingEvent(Base):
     __tablename__ = "training_events"
     __table_args__ = (
-        UniqueConstraint("ts", "exercise", "kind", name="uq_training_events_natural"),
+        UniqueConstraint("user_id", "ts", "exercise", "kind", name="uq_training_events_natural"),
         Index("ix_training_events_local_date_exercise", "local_date", "exercise"),
+        Index("ix_training_events_user_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False
+    )
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     local_date: Mapped[date] = mapped_column(Date, nullable=False)
     exercise: Mapped[str] = mapped_column(String(64), nullable=False)
