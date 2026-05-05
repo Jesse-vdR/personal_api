@@ -14,7 +14,8 @@ HEALTH_URL=http://127.0.0.1:8000/v1/health
 cd "$APP_DIR"
 
 # 1. Ensure venv exists and deps are current.
-if [ ! -d "$VENV" ]; then
+if [ ! -x "$VENV/bin/pip" ]; then
+    rm -rf "$VENV"
     python3 -m venv "$VENV"
 fi
 "$VENV/bin/pip" install --quiet --upgrade pip
