@@ -29,6 +29,7 @@ def create_event(
         exercise=payload.exercise,
         kind=payload.kind,
         reps=payload.reps,
+        duration_s=payload.duration_s,
     )
     session.add(event)
     session.commit()

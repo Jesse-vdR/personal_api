@@ -8,8 +8,9 @@ class TrainingEventIn(BaseModel):
     ts: datetime
     local_date: date
     exercise: str = Field(min_length=1, max_length=64)
-    kind: Literal["set"]
+    kind: Literal["set", "hold"]
     reps: int | None = Field(default=None, ge=0)
+    duration_s: int | None = Field(default=None, ge=0)
 
 
 class TrainingEventOut(BaseModel):
@@ -21,5 +22,6 @@ class TrainingEventOut(BaseModel):
     exercise: str
     kind: str
     reps: int | None
+    duration_s: int | None
     schema_v: int
     created_at: datetime

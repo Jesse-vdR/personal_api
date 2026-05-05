@@ -56,6 +56,7 @@ def main() -> int:
                         "exercise": obj["exercise"],
                         "kind": obj["kind"],
                         "reps": obj.get("reps"),
+                        "duration_s": obj.get("duration_s"),
                         "schema_v": obj.get("v", 1),
                     }
                 )
