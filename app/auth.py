@@ -1,21 +1,35 @@
 import logging
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from authlib.integrations.starlette_client import OAuth
+from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.db import get_session
+from app.models.user import User
 
 log = logging.getLogger("jesse-api.auth")
 
-bearer_scheme = HTTPBearer(auto_error=False)
+oauth = OAuth()
+oauth.register(
+    name="google",
+    client_id=settings.google_client_id,
+    client_secret=settings.google_client_secret,
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
 
 
-def require_bearer(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
-) -> None:
-    if not settings.bearer_token:
-        log.error("BEARER_TOKEN not configured — refusing auth-required request")
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "auth not configured")
-    if credentials is None or credentials.credentials != settings.bearer_token:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or missing bearer token")
+def require_session(
+    request: Request,
+    session: Annotated[Session, Depends(get_session)],
+) -> User:
+    user_id = request.session.get("user_id")
+    if user_id is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "not authenticated")
+    user = session.get(User, user_id)
+    if user is None:
+        request.session.clear()
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user no longer exists")
+    return user

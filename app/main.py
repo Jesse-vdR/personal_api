@@ -1,12 +1,13 @@
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
-from app.auth import require_bearer
 from app.config import settings
+from app.routers.auth import router as auth_router
 from app.routers.training import router as training_router
 
 logging.basicConfig(
@@ -20,9 +21,33 @@ _version_file = Path(__file__).parent / "version.txt"
 SHA = _version_file.read_text().strip() if _version_file.exists() else "dev"
 
 app = FastAPI(title="jesse-api", version="0.0.1")
-log.info("jesse-api starting sha=%s log_level=%s", SHA, settings.log_level)
 
+session_secret = settings.session_secret or "DEV_PLACEHOLDER_DO_NOT_USE_IN_PRODUCTION"
+if not settings.session_secret:
+    log.warning("SESSION_SECRET not set — using insecure placeholder")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=session_secret,
+    session_cookie="jesse_session",
+    max_age=60 * 60 * 24 * 30,
+    same_site="lax",
+    https_only=settings.cookie_secure,
+    domain=settings.cookie_domain or None,
+)
+
+cors_origins = [o.strip() for o in settings.allowed_redirect_origins.split(",") if o.strip()]
+if cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
+
+app.include_router(auth_router)
 app.include_router(training_router)
+log.info("jesse-api starting sha=%s log_level=%s", SHA, settings.log_level)
 
 
 @app.get("/")
@@ -33,8 +58,3 @@ def root() -> dict:
 @app.get("/v1/health")
 def health() -> dict:
     return {"ok": True, "ts": datetime.now(timezone.utc).isoformat(), "sha": SHA}
-
-
-@app.get("/v1/whoami")
-def whoami(_: Annotated[None, Depends(require_bearer)]) -> dict:
-    return {"authenticated": True}
