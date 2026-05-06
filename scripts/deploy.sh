@@ -9,6 +9,7 @@ set -euo pipefail
 APP_DIR=/srv/jesse-api/repo
 VENV=/srv/jesse-api/venv
 SERVICE=jesse-api.service
+WORKER=jesse-agent-worker.service
 HEALTH_URL=http://127.0.0.1:8000/v1/health
 
 cd "$APP_DIR"
@@ -26,9 +27,17 @@ fi
 set -a; . /etc/jesse/api.env; set +a
 "$VENV/bin/alembic" upgrade head
 
-# 3. Sync systemd unit if it changed.
+# 3. Sync systemd units if they changed.
+unit_changed=0
 if ! sudo cmp -s systemd/jesse-api.service /etc/systemd/system/jesse-api.service; then
     sudo cp systemd/jesse-api.service /etc/systemd/system/jesse-api.service
+    unit_changed=1
+fi
+if ! sudo cmp -s systemd/jesse-agent-worker.service /etc/systemd/system/jesse-agent-worker.service; then
+    sudo cp systemd/jesse-agent-worker.service /etc/systemd/system/jesse-agent-worker.service
+    unit_changed=1
+fi
+if [ "$unit_changed" = 1 ]; then
     sudo systemctl daemon-reload
 fi
 
@@ -40,9 +49,9 @@ if ! sudo cmp -s nginx/api.jesselab.space.conf /etc/nginx/sites-available/api.je
     sudo systemctl reload nginx
 fi
 
-# 5. Restart app.
-sudo systemctl enable --quiet "$SERVICE"
-sudo systemctl restart "$SERVICE"
+# 5. Restart app + worker.
+sudo systemctl enable --quiet "$SERVICE" "$WORKER"
+sudo systemctl restart "$SERVICE" "$WORKER"
 
 # 6. Health check (retry a few times for startup).
 for i in 1 2 3 4 5; do
