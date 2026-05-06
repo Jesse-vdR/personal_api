@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,20 @@ from app.models.user import User
 
 log = logging.getLogger("jesse-api.auth")
 router = APIRouter(prefix="/v1", tags=["auth"])
+
+
+_NOT_AUTHORIZED_HTML = """<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Not authorized</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;max-width:34rem;margin:5rem auto;padding:0 1rem;color:#222}</style>
+</head>
+<body>
+<h1>Not authorized</h1>
+<p>This Google account is not on the allowlist for jesselab.space.</p>
+<p>If you think this is a mistake, contact Jesse.</p>
+</body>
+</html>
+"""
 
 
 def _allowed_origins() -> list[str]:
@@ -42,7 +56,7 @@ async def google_login(request: Request, next: str | None = None) -> RedirectRes
 async def google_callback(
     request: Request,
     session: Annotated[Session, Depends(get_session)],
-) -> RedirectResponse:
+):
     try:
         token = await oauth.google.authorize_access_token(request)
     except OAuthError as exc:
@@ -54,28 +68,18 @@ async def google_callback(
     if not sub or not email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "missing sub/email from Google")
 
-    user = session.scalar(select(User).where(User.google_sub == sub))
+    user = session.scalar(select(User).where(User.email == email))
     if user is None:
-        # First-time sign-in: claim a migration-seeded row if one matches
-        # this email, otherwise create a fresh user row.
-        seed_sub = f"migration-seed:{email}"
-        user = session.scalar(select(User).where(User.google_sub == seed_sub))
-        if user is not None:
-            user.google_sub = sub
-            log.info("claimed migration-seed user id=%s email=%s", user.id, email)
-        else:
-            user = User(google_sub=sub, email=email)
-            session.add(user)
-            session.flush()
-            log.info("new user signup id=%s email=%s", user.id, email)
+        log.warning("oauth allowlist denied email=%s", email)
+        return HTMLResponse(_NOT_AUTHORIZED_HTML, status_code=status.HTTP_403_FORBIDDEN)
 
-    new_name, new_avatar = info.get("name"), info.get("picture")
-    if new_name and user.name != new_name:
-        user.name = new_name
-    if new_avatar and user.avatar_url != new_avatar:
-        user.avatar_url = new_avatar
-    if user.email != email:
-        user.email = email
+    if user.google_sub is None:
+        user.google_sub = sub
+        log.info("claimed allowlist user id=%s email=%s", user.id, email)
+
+    new_name = info.get("name")
+    if new_name and user.display_name != new_name:
+        user.display_name = new_name
     session.commit()
 
     request.session["user_id"] = user.id
@@ -92,8 +96,7 @@ async def logout(request: Request) -> dict:
 @router.get("/me")
 def me(user: Annotated[User, Depends(require_session)]) -> dict:
     return {
-        "id": user.id,
+        "user_id": user.id,
         "email": user.email,
-        "name": user.name,
-        "avatar_url": user.avatar_url,
+        "display_name": user.display_name,
     }
