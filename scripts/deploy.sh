@@ -41,32 +41,19 @@ if [ "$unit_changed" = 1 ]; then
     sudo systemctl daemon-reload
 fi
 
-# 4. Sync static homepage to /srv/jesse-web (must exist + be owned by deploy:deploy;
-#    one-time setup documented in README VM contract).
-rsync -a --delete web/ /srv/jesse-web/
-
-# 5. Sync nginx sites if they changed.
-nginx_changed=0
-sync_site() {
-    local src=$1 name=$2
-    if ! sudo cmp -s "$src" "/etc/nginx/sites-available/$name"; then
-        sudo cp "$src" "/etc/nginx/sites-available/$name"
-        sudo ln -sf "/etc/nginx/sites-available/$name" "/etc/nginx/sites-enabled/$name"
-        nginx_changed=1
-    fi
-}
-sync_site nginx/api.jesselab.space.conf api.jesselab.space
-sync_site nginx/jesselab.space.conf     jesselab.space
-if [ "$nginx_changed" = 1 ]; then
+# 4. Sync nginx site if it changed.
+if ! sudo cmp -s nginx/api.jesselab.space.conf /etc/nginx/sites-available/api.jesselab.space; then
+    sudo cp nginx/api.jesselab.space.conf /etc/nginx/sites-available/api.jesselab.space
+    sudo ln -sf /etc/nginx/sites-available/api.jesselab.space /etc/nginx/sites-enabled/api.jesselab.space
     sudo nginx -t
     sudo systemctl reload nginx
 fi
 
-# 6. Restart app + worker.
+# 5. Restart app + worker.
 sudo systemctl enable --quiet "$SERVICE" "$WORKER"
 sudo systemctl restart "$SERVICE" "$WORKER"
 
-# 7. Health check (retry a few times for startup).
+# 6. Health check (retry a few times for startup).
 for i in 1 2 3 4 5; do
     if curl -fsS "$HEALTH_URL" > /dev/null; then
         echo "deploy ok"
