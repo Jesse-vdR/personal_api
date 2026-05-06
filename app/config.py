@@ -47,5 +47,15 @@ class Settings:
         default_factory=lambda: os.environ.get("MEDIA_ROOT", "/var/lib/jesse/media")
     )
 
+    telegram_bot_token: str = field(
+        default_factory=lambda: os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    )
+    telegram_intake_token: str = field(
+        default_factory=lambda: os.environ.get("TELEGRAM_INTAKE_TOKEN", "")
+    )
+    telegram_owner_user_id: int = field(
+        default_factory=lambda: int(os.environ.get("TELEGRAM_OWNER_USER_ID", "1") or "1")
+    )
+
 
 settings = Settings()
