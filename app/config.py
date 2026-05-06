@@ -43,5 +43,9 @@ class Settings:
         default_factory=lambda: os.environ.get("OPENAI_API_KEY", "")
     )
 
+    media_root: str = field(
+        default_factory=lambda: os.environ.get("MEDIA_ROOT", "/var/lib/jesse/media")
+    )
+
 
 settings = Settings()
