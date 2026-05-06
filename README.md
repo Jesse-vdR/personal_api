@@ -2,9 +2,9 @@
 
 FastAPI service backing the personal hub on `jesse-prod`. Roadmap: [Jesse-vdR/Jesse#9](https://github.com/Jesse-vdR/Jesse/issues/9). Architecture: [`docs/website-architecture.md`](https://github.com/Jesse-vdR/Jesse/blob/main/docs/website-architecture.md).
 
-Status: multi-user. Google OAuth signup (open — no whitelist), `users` + `training_events` (per-user). DB-backed endpoints landed in Phase 3; auth landed in Jesse#11.
+Status: multi-user. Google OAuth signup (open — no whitelist), `users` + `training_events` (per-user). DB-backed endpoints landed in Phase 3; auth landed in Jesse#11. Apex homepage (`web/`) added in Jesse#25.
 
-Live: https://api.jesselab.space/v1/health
+Live: https://api.jesselab.space/v1/health (API), https://jesselab.space/ (homepage)
 
 ## Local dev
 
@@ -74,19 +74,26 @@ requirements.txt                pinned deps
 Makefile                        install / dev / migrate / revision / deploy / clean
 .env.example                    template for local dev env
 systemd/jesse-api.service       systemd unit (synced to /etc/systemd/system/)
-nginx/api.jesselab.space.conf   nginx site (synced to /etc/nginx/sites-available/)
+nginx/api.jesselab.space.conf   API vhost (synced to /etc/nginx/sites-available/)
+nginx/jesselab.space.conf       apex vhost serving the homepage from /srv/jesse-web
+web/                            static homepage (index, projects stub, css, js); rsync'd to /srv/jesse-web on deploy
 scripts/deploy.sh               runs on VM after rsync
 scripts/manual-deploy.sh        tar+ssh path for `make deploy`
 .github/workflows/deploy.yml    push-to-main pipeline
 ```
 
+### Apex homepage (`web/`)
+
+Static HTML served by nginx at `https://jesselab.space/`. `app.js` calls `/v1/me` on the API with `credentials: 'include'`; the session cookie is shared via the `.jesselab.space` cookie domain, so signing in on the API drops a cookie that the homepage reads. "Sign in with Google" links to `/v1/auth/google/login?next=https://jesselab.space/`. Locally: `python -m http.server 8001` from `web/` and the API on `:8000`.
+
 ## VM contract
 
 - `deploy` user, `/srv/jesse-api/{repo,venv}` owned by `deploy:deploy`
+- `/srv/jesse-web/` owned by `deploy:deploy` (one-time `sudo mkdir -p /srv/jesse-web && sudo chown deploy:deploy /srv/jesse-web`); deploy.sh rsyncs `web/` into it
 - Sudoers: `deploy ALL=NOPASSWD: /bin/cp, /bin/cmp, /bin/systemctl, /usr/bin/journalctl, /usr/sbin/nginx, /bin/ln`
-- Service env: `/etc/jesse/api.env` (mode 640, root:deploy). Must contain `DATABASE_URL`, `SESSION_SECRET`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `ALLOWED_REDIRECT_ORIGINS`, `COOKIE_DOMAIN=.jesselab.space`, `COOKIE_SECURE=true`, `DEFAULT_POST_LOGIN_URL`. Loaded by both the systemd unit (`EnvironmentFile=-`) and `deploy.sh` (sourced unconditionally — alembic fails loudly if DATABASE_URL is missing).
+- Service env: `/etc/jesse/api.env` (mode 640, root:deploy). Must contain `DATABASE_URL`, `SESSION_SECRET`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `ALLOWED_REDIRECT_ORIGINS` (must include `https://jesselab.space`), `COOKIE_DOMAIN=.jesselab.space`, `COOKIE_SECURE=true`, `DEFAULT_POST_LOGIN_URL=https://jesselab.space/`. Loaded by both the systemd unit (`EnvironmentFile=-`) and `deploy.sh` (sourced unconditionally — alembic fails loudly if DATABASE_URL is missing).
 - Postgres role `jesse_api` owns DB `jesse_api` on `127.0.0.1:5432`.
-- nginx + Postgres + Let's Encrypt cert for `*.jesselab.space` already in place.
+- nginx + Postgres + Let's Encrypt cert for `jesselab.space` + `*.jesselab.space` already in place (apex SAN required for the apex vhost).
 
 ## GH Actions secrets
 
@@ -103,7 +110,7 @@ scripts/manual-deploy.sh        tar+ssh path for `make deploy`
 | GET | `/` | public | `{service, version, sha}` |
 | GET | `/v1/health` | public | `{ok, ts, sha}` |
 | GET | `/v1/auth/google/login?next=<url>` | public | 302 → Google consent screen |
-| GET | `/v1/auth/google/callback` | public | 302 → `next` (or `DEFAULT_POST_LOGIN_URL`); sets `jesse_session` cookie |
+| GET | `/v1/auth/google/callback` | public | 302 → `next` (or `DEFAULT_POST_LOGIN_URL`); sets `jesse_session` cookie scoped to `.jesselab.space` |
 | POST | `/v1/auth/logout` | public | clears the session cookie |
 | GET | `/v1/me` | session | `{id, email, name, avatar_url}` |
 | POST | `/v1/training/events` | session | creates an event for the current user |
