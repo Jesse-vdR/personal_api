@@ -36,5 +36,9 @@ class Settings:
         default_factory=lambda: os.environ.get("ALLOWED_REDIRECT_ORIGINS", "")
     )
 
+    anthropic_api_key: str = field(
+        default_factory=lambda: os.environ.get("ANTHROPIC_API_KEY", "")
+    )
+
 
 settings = Settings()
