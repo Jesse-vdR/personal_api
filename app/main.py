@@ -8,6 +8,11 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.routers.auth import router as auth_router
+from app.routers.goals import router as goals_router
+from app.routers.long_term import router as long_term_router
+from app.routers.plans import router as plans_router
+from app.routers.profile import router as profile_router
+from app.routers.tracks import router as tracks_router
 from app.routers.training import router as training_router
 
 logging.basicConfig(
@@ -47,6 +52,11 @@ if cors_origins:
 
 app.include_router(auth_router)
 app.include_router(training_router)
+app.include_router(tracks_router)
+app.include_router(goals_router)
+app.include_router(plans_router)
+app.include_router(profile_router)
+app.include_router(long_term_router)
 log.info("jesse-api starting sha=%s log_level=%s", SHA, settings.log_level)
 
 
