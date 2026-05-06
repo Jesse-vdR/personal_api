@@ -28,10 +28,13 @@ def create_event(
         user_id=user.id,
         ts=payload.ts,
         local_date=payload.local_date,
-        exercise=payload.exercise,
         kind=payload.kind,
+        exercise=payload.exercise,
         reps=payload.reps,
         duration_s=payload.duration_s,
+        track=payload.track,
+        stage=payload.stage,
+        note=payload.note,
     )
     session.add(event)
     session.commit()
