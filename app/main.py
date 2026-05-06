@@ -10,6 +10,7 @@ from app.config import settings
 from app.routers.agents import router as agents_router
 from app.routers.auth import router as auth_router
 from app.routers.goals import router as goals_router
+from app.routers.journal import router as journal_router
 from app.routers.long_term import router as long_term_router
 from app.routers.plans import router as plans_router
 from app.routers.profile import router as profile_router
@@ -59,6 +60,7 @@ app.include_router(plans_router)
 app.include_router(profile_router)
 app.include_router(long_term_router)
 app.include_router(agents_router)
+app.include_router(journal_router)
 log.info("jesse-api starting sha=%s log_level=%s", SHA, settings.log_level)
 
 
