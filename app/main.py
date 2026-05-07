@@ -15,6 +15,7 @@ from app.routers.journal import router as journal_router
 from app.routers.long_term import router as long_term_router
 from app.routers.plans import router as plans_router
 from app.routers.profile import router as profile_router
+from app.routers.projects import router as projects_router
 from app.routers.tracks import router as tracks_router
 from app.routers.training import router as training_router
 
@@ -63,6 +64,7 @@ app.include_router(long_term_router)
 app.include_router(agents_router)
 app.include_router(journal_router)
 app.include_router(intake_router)
+app.include_router(projects_router)
 log.info("jesse-api starting sha=%s log_level=%s", SHA, settings.log_level)
 
 
