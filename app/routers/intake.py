@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Body, Depends, Form, Header, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,7 +18,7 @@ from app.db import get_session
 from app.models.intake import Intake
 from app.models.media import Media
 from app.models.user import User
-from app.schemas.intake import IntakeOut
+from app.schemas.intake import IntakeOut, IntakePending, IntakeProcessedRequest
 
 log = logging.getLogger("jesse-api.intake")
 router = APIRouter(prefix="/v1/intake", tags=["intake"])
@@ -221,6 +221,51 @@ async def telegram_webhook(
             log.warning("telegram reply failed: %s", exc)
 
     return {"ok": True, "intake_id": row.id}
+
+
+@router.get("/pending", response_model=list[IntakePending])
+def list_pending(
+    session: Annotated[Session, Depends(get_session)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> list[IntakePending]:
+    _check_bearer(authorization)
+    rows = session.execute(
+        select(Intake, Media)
+        .join(Media, Media.id == Intake.media_id, isouter=True)
+        .where(Intake.processed_at.is_(None))
+        .order_by(Intake.ts.asc())
+    ).all()
+    return [
+        IntakePending(
+            id=intake.id,
+            ts=intake.ts,
+            project_slug=intake.project_slug,
+            body=intake.body,
+            source=intake.source,
+            media_path=media.path if media else None,
+            media_mime=media.mime if media else None,
+            media_sha256=media.sha256 if media else None,
+        )
+        for intake, media in rows
+    ]
+
+
+@router.post("/{intake_id}/processed", status_code=status.HTTP_204_NO_CONTENT)
+def mark_processed(
+    intake_id: int,
+    session: Annotated[Session, Depends(get_session)],
+    authorization: Annotated[str | None, Header()] = None,
+    payload: Annotated[IntakeProcessedRequest | None, Body()] = None,
+) -> None:
+    _check_bearer(authorization)
+    row = session.get(Intake, intake_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "intake not found")
+    if row.processed_at is None:
+        row.processed_at = datetime.now(timezone.utc)
+        session.commit()
+    if payload and payload.failure_reason:
+        log.warning("intake %s marked processed with failure: %s", intake_id, payload.failure_reason)
 
 
 @router.get("/media/{media_id}")
