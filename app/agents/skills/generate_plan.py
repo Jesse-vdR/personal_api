@@ -9,7 +9,9 @@ Claude Opus 4.7 via a forced tool call (`submit_plan`) so the response
 is a typed plan body matching the shape of training/plan.json. The
 tool also returns a short `rationale` string; it is included in the
 skill output (and surfaced to the UI via agent_jobs.output) but
-stripped before the body is persisted to `plans.body`.
+stripped before the body is persisted to `plans.body`. If a plan
+already exists for (user, week_start), its body and generated_by are
+overwritten in place — re-generate replaces the prior version.
 
 Long-lived context (profile, long_term, tracks) is cached via a single
 ephemeral cache breakpoint on the system prompt. Volatile inputs
@@ -24,7 +26,6 @@ from typing import Any
 
 from anthropic import Anthropic
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.goal import Goal
@@ -221,20 +222,23 @@ def run(
     body["days"] = _days_array_to_map(body.get("days"), week_start)
     rationale = (body.pop("rationale", None) or "").strip() or None
 
-    plan = Plan(
-        user_id=user.id,
-        week_start=week_start,
-        body=body,
-        generated_by=f"agent:{job_id}",
+    plan = session.scalar(
+        select(Plan).where(
+            Plan.user_id == user.id, Plan.week_start == week_start
+        )
     )
-    session.add(plan)
-    try:
-        session.flush()
-    except IntegrityError as exc:
-        session.rollback()
-        raise RuntimeError(
-            f"plan already exists for week_start={week_start.isoformat()}"
-        ) from exc
+    if plan is None:
+        plan = Plan(
+            user_id=user.id,
+            week_start=week_start,
+            body=body,
+            generated_by=f"agent:{job_id}",
+        )
+        session.add(plan)
+    else:
+        plan.body = body
+        plan.generated_by = f"agent:{job_id}"
+    session.flush()
 
     return {
         "plan_id": plan.id,
