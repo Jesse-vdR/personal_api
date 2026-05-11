@@ -1,10 +1,11 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents import skills
+from app.agents.skills import generate_plan
 from app.auth import require_session
 from app.db import get_session
 from app.models.agent_job import AgentJob
@@ -12,6 +13,7 @@ from app.models.user import User
 from app.schemas.agent_job import AgentJobIn, AgentJobOut
 
 router = APIRouter(prefix="/v1/agents/jobs", tags=["agents"])
+preview_router = APIRouter(prefix="/v1/agents/generate-plan", tags=["agents"])
 
 
 @router.post("", response_model=AgentJobOut, status_code=status.HTTP_201_CREATED)
@@ -60,3 +62,16 @@ def list_jobs(
     if kind is not None:
         stmt = stmt.where(AgentJob.kind == kind)
     return list(session.scalars(stmt).all())
+
+
+@preview_router.get("/preview")
+def generate_plan_preview(
+    session: Annotated[Session, Depends(get_session)],
+    user: Annotated[User, Depends(require_session)],
+    week_start: str | None = Query(default=None),
+) -> dict[str, Any]:
+    try:
+        ws = generate_plan.resolve_week_start(week_start)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return generate_plan.collect_inputs(session, user, ws)
