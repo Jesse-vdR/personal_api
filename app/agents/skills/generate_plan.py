@@ -37,13 +37,14 @@ MODEL = "claude-opus-4-7"
 _SUBMIT_PLAN_TOOL: dict[str, Any] = {
     "name": "submit_plan",
     "description": (
-        "Submit the generated weekly training plan. The body must match the "
-        "shape of training/plan.json: a top-level object with `week_start` "
-        "(YYYY-MM-DD, must equal the requested Monday) and `days`, where "
-        "`days` maps each YYYY-MM-DD in the week to an ordered list of "
-        "exercises. Each exercise has slug, display, unit "
+        "Submit the generated weekly training plan. Top-level object: "
+        "`week_start` (YYYY-MM-DD, must equal the requested Monday) and "
+        "`days`, an array of exactly 7 day objects in chronological order "
+        "Mon..Sun. Each day has `date` (YYYY-MM-DD) and `exercises`, an "
+        "ordered list of exercises with slug, display, unit "
         "('reps' | 'duration_s' | 'walks'), target_total, per_set, sets. "
-        "target_total must equal per_set * sets."
+        "target_total must equal per_set * sets. The runner reshapes the "
+        "array into training/plan.json's date-keyed map before storage."
     ),
     "strict": True,
     "input_schema": {
@@ -54,36 +55,47 @@ _SUBMIT_PLAN_TOOL: dict[str, Any] = {
                 "description": "Monday of the planned week, YYYY-MM-DD.",
             },
             "days": {
-                "type": "object",
+                "type": "array",
                 "description": (
-                    "Map of YYYY-MM-DD -> array of exercise objects, one "
-                    "entry per day Mon..Sun of the week."
+                    "Exactly 7 day objects, one per day Mon..Sun, in "
+                    "chronological order starting at week_start."
                 ),
-                "additionalProperties": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "slug": {"type": "string"},
-                            "display": {"type": "string"},
-                            "unit": {
-                                "type": "string",
-                                "enum": ["reps", "duration_s", "walks"],
-                            },
-                            "target_total": {"type": "integer"},
-                            "per_set": {"type": "integer"},
-                            "sets": {"type": "integer"},
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "date": {
+                            "type": "string",
+                            "description": "YYYY-MM-DD for this day.",
                         },
-                        "required": [
-                            "slug",
-                            "display",
-                            "unit",
-                            "target_total",
-                            "per_set",
-                            "sets",
-                        ],
-                        "additionalProperties": False,
+                        "exercises": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "slug": {"type": "string"},
+                                    "display": {"type": "string"},
+                                    "unit": {
+                                        "type": "string",
+                                        "enum": ["reps", "duration_s", "walks"],
+                                    },
+                                    "target_total": {"type": "integer"},
+                                    "per_set": {"type": "integer"},
+                                    "sets": {"type": "integer"},
+                                },
+                                "required": [
+                                    "slug",
+                                    "display",
+                                    "unit",
+                                    "target_total",
+                                    "per_set",
+                                    "sets",
+                                ],
+                                "additionalProperties": False,
+                            },
+                        },
                     },
+                    "required": ["date", "exercises"],
+                    "additionalProperties": False,
                 },
             },
         },
@@ -146,6 +158,7 @@ def run(
             f"agent returned week_start={body.get('week_start')!r}, "
             f"expected {week_start.isoformat()!r}"
         )
+    body["days"] = _days_array_to_map(body.get("days"), week_start)
 
     plan = Plan(
         user_id=user.id,
@@ -276,6 +289,28 @@ def _markdown_or_json(body: dict[str, Any]) -> str:
     if isinstance(body, dict) and isinstance(body.get("markdown"), str):
         return body["markdown"]
     return json.dumps(body, sort_keys=True, indent=2)
+
+
+def _days_array_to_map(
+    days: Any, week_start: date
+) -> dict[str, list[dict[str, Any]]]:
+    if not isinstance(days, list) or len(days) != 7:
+        raise RuntimeError(
+            f"agent returned days={type(days).__name__} len="
+            f"{len(days) if isinstance(days, list) else 'n/a'}, expected list of 7"
+        )
+    expected = [
+        (week_start + timedelta(days=i)).isoformat() for i in range(7)
+    ]
+    out: dict[str, list[dict[str, Any]]] = {}
+    for entry, want in zip(days, expected):
+        got = entry.get("date")
+        if got != want:
+            raise RuntimeError(
+                f"agent returned day date={got!r}, expected {want!r}"
+            )
+        out[want] = list(entry.get("exercises") or [])
+    return out
 
 
 def _extract_tool_input(response: Any) -> dict[str, Any]:
