@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
+from app.routers.agents import preview_router as agents_preview_router
 from app.routers.agents import router as agents_router
 from app.routers.auth import router as auth_router
 from app.routers.goals import router as goals_router
@@ -62,6 +63,7 @@ app.include_router(plans_router)
 app.include_router(profile_router)
 app.include_router(long_term_router)
 app.include_router(agents_router)
+app.include_router(agents_preview_router)
 app.include_router(journal_router)
 app.include_router(intake_router)
 app.include_router(projects_router)
